@@ -15,7 +15,7 @@ fi
 #       And the hooks which trigger CodeBuild project builds are environment and project and also repo specific,
 #       e.g. as of 2023-09-14 the only repositories which will trigger CodeBuild deployments on a git tag push
 #       are rcplus-alloy-cockpit-*. The triggering hooks are defined in
-#       https://github.com/ringier-data/ops-ci-codebuild/blob/main/infrastructure/roles/configure-ci/files/cf-codebuild.yml#L198
+#       https://github.com/alloy-ch/ops-ci-codebuild/blob/main/infrastructure/roles/configure-ci/files/cf-codebuild.yml#L198
 if [[ ${AGGRESSIVE_DEVELOPMENT} == "1" ]]; then
   if [[ ${CODEBUILD_WEBHOOK_HEAD_REF} == "refs/heads/develop" ]] || [[ ${CODEBUILD_WEBHOOK_HEAD_REF} == "refs/heads/main" ]]; then
     DEPLOYING="Will deploy (because: develop or main branch)"
