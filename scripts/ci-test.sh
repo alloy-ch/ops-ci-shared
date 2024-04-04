@@ -55,6 +55,8 @@ elif [[ -f "pyproject.toml" ]]; then
   fi
 
   ENV=$ENV poetry run pytest
+  echo "Cleaning up test environment..."
+  rm -rf .venv
 else
   echo "ERROR: Could not determine test suite to run."
   exit 1
