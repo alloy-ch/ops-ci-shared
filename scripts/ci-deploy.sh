@@ -36,7 +36,7 @@ fi
 # shellcheck source=.
 . "$dir"/ci-include.sh
 
-MODULES=("${INFRASTRUCTURE_FOLDERS//,/ }")
+MODULES=(${INFRASTRUCTURE_FOLDERS//,/ })
 
 # check that each module contains something deployable
 for module in "${MODULES[@]}"; do
@@ -59,7 +59,7 @@ for module in "${MODULES[@]}"; do
   else
     if [[ ${OPS_CI_AWS_BRANCH} != "main" || ${REPO_NAME} == "ops-ci-codebuild-image" ]]; then
       # install the collection for CI/CD (the main branch is already baked into the CodeBuild custom image)
-      ansible-galaxy collection install --force git+https://github.com/ringier-data/ops-ci-aws.git,"${OPS_CI_AWS_BRANCH}"
+      ansible-galaxy collection install --force git+https://github.com/alloy-ch/ops-ci-aws.git,"${OPS_CI_AWS_BRANCH}"
     fi
 
     if [[ -f "requirements.txt" ]]; then

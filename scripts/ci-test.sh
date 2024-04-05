@@ -30,6 +30,13 @@ else
   SKIP_INSTALL=0
 fi
 
+#
+# [NOTE-js] This assumes that we follow the practice where dbt project is directly in the root dbt folder e.g dbt/alloy-project 
+if [[ "$source_folder" == *"/dbt/"* ]]; then
+  dbt_project_folder=$(basename "$source_folder")
+  source_folder=$(dirname "$source_folder")
+fi 
+
 echo "Running tests in $source_folder"
 pushd "${source_folder}"
 
@@ -42,7 +49,14 @@ elif [[ -f "pyproject.toml" ]]; then
   poetry config virtualenvs.create true
   poetry config virtualenvs.in-project true
   (( SKIP_INSTALL == 0 )) && poetry install --no-interaction --no-ansi
-  poetry run pytest
+
+  if [[ "$source_folder" == *"/dbt" ]]; then
+    .venv/bin/dbt deps --project-dir "$dbt_project_folder" --profiles-dir "$dbt_project_folder"
+  fi
+
+  ENV=$ENV poetry run pytest
+  echo "Cleaning up test environment..."
+  rm -rf .venv
 else
   echo "ERROR: Could not determine test suite to run."
   exit 1

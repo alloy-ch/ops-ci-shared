@@ -31,9 +31,9 @@ fi
 rm -f /tmp/is_deploy_flag
 
 # remove the trailing .git
-# e.g. https://github.com/ringier-data/rcplus-ci-debug.git ==> https://github.com/ringier-data/rcplus-ci-debug
+# e.g. https://github.com/alloy-ch/rcplus-ci-debug.git ==> https://github.com/alloy-ch/rcplus-ci-debug
 repo_url=${CODEBUILD_SOURCE_REPO_URL//".git"/}
-# e.g. https://github.com/ringier-data/rcplus-ci-debug ==> rcplus-ci-debug
+# e.g. https://github.com/alloy-ch/rcplus-ci-debug ==> rcplus-ci-debug
 # get the part after the last splash
 repo="${repo_url##*/}"
 build_url="${CODEBUILD_BUILD_URL}"
