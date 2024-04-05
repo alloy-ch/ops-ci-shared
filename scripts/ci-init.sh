@@ -50,9 +50,9 @@ echo /tmp/is_deploy_flag: \"$(cat /tmp/is_deploy_flag 2>/dev/null)\"
 if [[ ! -f ~/.npmrc ]]; then
   echo "Creating ~/.npmrc"
   github_token=$(aws --region "${AWS_REGION}" ssm get-parameter --output json --name /ops-ci/github-access-token --with-decryption | jq -crM '.Parameter.Value')
-  echo "//npm.pkg.github.com/:_authToken=$github_token" >>~/.npmrc
-  github_org=$(aws --region "${AWS_REGION}" ssm get-parameter --output json --name /ops-ci/github-organization 2>/dev/null | jq -crM '.Parameter.Value')
-  echo "@$github_org:registry=https://npm.pkg.github.com" >>~/.npmrc
+  echo "//npm.pkg.github.com/:_authToken=$github_token" >> ~/.npmrc
+  echo "ringier-data:registry=https://npm.pkg.github.com" >> ~/.npmrc
+  echo "alloy-ch:registry=https://npm.pkg.github.com" >> ~/.npmrc
 else
   echo "Skipping ~/.npmrc as already exists"
 fi
