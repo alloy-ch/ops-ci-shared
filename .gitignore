@@ -5,4 +5,5 @@
 !README.md
 !misc/*.sh
 !misc/docker/Dockerfile.*
+!scripts
 !scripts/*.sh
