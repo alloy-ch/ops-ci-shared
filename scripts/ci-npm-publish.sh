@@ -41,7 +41,7 @@ if [[ -z "$package_version_remote" ]]; then
   to_publish=1
 fi
 
-if [[ ${CODEBUILD_WEBHOOK_HEAD_REF} == "refs/heads/main" ]]; then
+if [[ ${CODEBUILD_WEBHOOK_HEAD_REF} == "refs/heads/main" || ${FORCE_BRANCH} == "main" ]]; then
   if ((to_publish == 0)); then
     echo Package exists, tagging "$package_name"@"$package_version" as "latest"
     npm dist-tag add "$package_name"@"$package_version" latest
@@ -49,7 +49,7 @@ if [[ ${CODEBUILD_WEBHOOK_HEAD_REF} == "refs/heads/main" ]]; then
     echo Package does not exist, publishing "$package_name"@"$package_version" as "latest"
     npm --no-color publish --tag latest
   fi
-elif [[ ${CODEBUILD_WEBHOOK_HEAD_REF} == "refs/heads/develop" ]]; then
+elif [[ ${CODEBUILD_WEBHOOK_HEAD_REF} == "refs/heads/develop" || ${FORCE_BRANCH} == "develop" ]]; then
   if ((to_publish == 0)); then
     echo Package exists, tagging "$package_name"@"$package_version" as "next"
     npm dist-tag add "$package_name"@"$package_version" next
