@@ -36,7 +36,10 @@ to_publish=0
 if [[ -z "$package_version_remote" ]]; then
   # package does not exist at the remote registry
   echo "Publishing npm package from $source_folder"
-  npm --no-color install
+  # NOTE-zw: here we allow broken peer dependencies by intention.
+  # This is not a good practice for production, but we do have some packages that have broken peer dependencies.
+  # As the local test is required anyway before commiting the code for final assembly, we can allow this here.
+  npm --no-color install --legacy-peer-deps
   npm --no-color run build
   to_publish=1
 fi
