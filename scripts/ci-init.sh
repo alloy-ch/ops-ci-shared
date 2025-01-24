@@ -10,6 +10,9 @@ dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 if [[ -f /tmp/is_deploy_flag ]]; then
   rm /tmp/is_deploy_flag
 fi
+if [[ -f /tmp/is_pr_env_deploy_flag ]]; then
+  rm /tmp/is_pr_env_deploy_flag
+fi
 
 # NOTE: All the actions below are only executed conditionally on the hook which triggers the build.
 #       And the hooks which trigger CodeBuild project builds are environment and project and also repo specific,
@@ -41,10 +44,37 @@ else
   fi
 fi
 
-echo ENV=\""${ENV}"\", CODEBUILD_WEBHOOK_HEAD_REF=\""${CODEBUILD_WEBHOOK_HEAD_REF}"\", FORCE_DEPLOY=\""${FORCE_DEPLOY}"\". "${DEPLOYING}".
+# Check if we should deploy PR environment
+if [[ ${FORCE_DEPLOY_PR_ENVIRONMENT} =~ ^[0-9]+$ ]]; then
+   DEPLOYING="Will deploy (because: FORCE_DEPLOY_PR_ENVIRONMENT)"
+   echo "1" > /tmp/is_deploy_flag
+   echo "1" > /tmp/is_pr_env_deploy_flag
+   echo $FORCE_DEPLOY_PR_ENVIRONMENT > /tmp/pr_number
+elif [[ $(cat /tmp/is_deploy_flag 2>/dev/null) != "1" ]] && [[ ${ENABLE_PR_ENVIRONMENTS} == "true" ]] && [[ ${CODEBUILD_WEBHOOK_TRIGGER} == "pr/"* ]]; then
+  # At this point we know:
+  #  * We are not already deploying
+  #  * We are in a repo which has PR environments enabled, and
+  #  * it was triggered by a GitHub Pull Request
+  # So, we should deploy the PR environment if the pull request has that label "pr-environment"
+  export GH_TOKEN=$(aws --region "${AWS_REGION}" ssm get-parameter --output json --name /ops-ci/github-access-token --with-decryption | jq -crM '.Parameter.Value')
+  pr_number=$(echo "${CODEBUILD_WEBHOOK_TRIGGER}" | cut -d'/' -f2)
+  if gh pr view "$pr_number" --json labels --jq '.labels[].name' | grep -q "pr-environment" ; then
+   DEPLOYING="Will deploy (because: PR environment)"
+   echo "1" > /tmp/is_deploy_flag
+   echo "1" > /tmp/is_pr_env_deploy_flag
+   echo $pr_number > /tmp/pr_number
+  fi
+  unset GH_TOKEN
+fi
 
 # shellcheck disable=SC2046
 echo /tmp/is_deploy_flag: \"$(cat /tmp/is_deploy_flag 2>/dev/null)\"
+# shellcheck disable=SC2046
+echo /tmp/is_pr_env_deploy_flag: \"$(cat /tmp/is_pr_env_deploy_flag 2>/dev/null)\"
+# shellcheck disable=SC2046
+echo /tmp/pr_number: \"$(cat /tmp/pr_number 2>/dev/null)\"
+
+echo ENV=\""${ENV}"\", CODEBUILD_WEBHOOK_HEAD_REF=\""${CODEBUILD_WEBHOOK_HEAD_REF}"\", ENABLE_PR_ENVIRONMENTS=\"${ENABLE_PR_ENVIRONMENTS}\", CODEBUILD_WEBHOOK_TRIGGER=\"${CODEBUILD_WEBHOOK_TRIGGER}\", FORCE_DEPLOY=\""${FORCE_DEPLOY}"\". "${DEPLOYING}".
 
 # Setup npmrc
 if [[ ! -f ~/.npmrc ]]; then
