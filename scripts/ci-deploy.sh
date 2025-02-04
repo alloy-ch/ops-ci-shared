@@ -47,6 +47,7 @@ else
   IS_PR_ENV_BUILD="false"
 fi
 
+
 # check that each module contains something deployable
 for module in "${MODULES[@]}"; do
   pushd "${module}"
