@@ -45,7 +45,7 @@ else
 fi
 
 # Check if we should deploy PR environment
-if [[ ${FORCE_DEPLOY_PR_ENVIRONMENT} =~ ^[0-9]+$ ]]; then
+if [[ ${ENABLE_PR_ENVIRONMENTS} == "true" ]] && [[ ${FORCE_DEPLOY_PR_ENVIRONMENT} =~ ^[0-9]+$ ]]; then
    DEPLOYING="Will deploy (because: FORCE_DEPLOY_PR_ENVIRONMENT)"
    echo "1" > /tmp/is_deploy_flag
    echo "1" > /tmp/is_pr_env_deploy_flag
