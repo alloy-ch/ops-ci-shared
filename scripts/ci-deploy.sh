@@ -38,6 +38,16 @@ fi
 
 MODULES=(${INFRASTRUCTURE_FOLDERS//,/ })
 
+# PR Environment condition
+DEPLOY_PR_ENV_FLAG="$(cat /tmp/is_pr_env_deploy_flag 2>/dev/null)"
+PR_NUMBER="$(cat /tmp/pr_number 2>/dev/null)"
+if [[ ${DEPLOY_PR_ENV_FLAG} == "1" ]] && [[ ${PR_NUMBER} =~ ^[0-9]+$ ]]; then
+  IS_PR_ENV_BUILD="true"
+else
+  IS_PR_ENV_BUILD="false"
+fi
+
+
 # check that each module contains something deployable
 for module in "${MODULES[@]}"; do
   pushd "${module}"
@@ -65,7 +75,13 @@ for module in "${MODULES[@]}"; do
     if [[ -f "requirements.txt" ]]; then
       pip install -r requirements.txt
     fi
-    ansible-playbook -e env="$ENV" playbook.yml
+
+    if [[ "$IS_PR_ENV_BUILD" != "true" ]]; then
+      ansible-playbook -e env="$ENV" playbook.yml
+    else
+      ansible-playbook -e env="$ENV" -e is_pr_env_build="$IS_PR_ENV_BUILD" -e pr_number="$PR_NUMBER" playbook.yml
+    fi
+    
   fi
 
   popd
