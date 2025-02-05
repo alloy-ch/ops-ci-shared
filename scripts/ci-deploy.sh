@@ -39,9 +39,8 @@ fi
 MODULES=(${INFRASTRUCTURE_FOLDERS//,/ })
 
 # PR Environment condition
-DEPLOY_PR_ENV_FLAG="$(cat /tmp/is_pr_env_deploy_flag 2>/dev/null)"
-PR_NUMBER="$(cat /tmp/pr_number 2>/dev/null)"
-if [[ ${DEPLOY_PR_ENV_FLAG} == "1" ]] && [[ ${PR_NUMBER} =~ ^[0-9]+$ ]]; then
+if [[ $(cat /tmp/is_pr_env_deploy_flag 2>/dev/null) == "1" ]] && [[ $(cat /tmp/pr_number 2>/dev/null) =~ ^[0-9]+$ ]]; then
+  PR_NUMBER="$(cat /tmp/pr_number 2>/dev/null)"
   IS_PR_ENV_BUILD="true"
 else
   IS_PR_ENV_BUILD="false"
