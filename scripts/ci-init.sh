@@ -7,12 +7,10 @@ dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 # shellcheck source=.
 . "$dir"/ci-safeguard.sh
 
-if [[ -f /tmp/is_deploy_flag ]]; then
-  rm /tmp/is_deploy_flag
-fi
-if [[ -f /tmp/is_pr_env_deploy_flag ]]; then
-  rm /tmp/is_pr_env_deploy_flag
-fi
+rm -f /tmp/is_deploy_flag
+rm -f /tmp/is_pr_env_deploy_flag
+rm -f /tmp/pr_env_url
+rm -f /tmp/pr_number
 
 # NOTE: All the actions below are only executed conditionally on the hook which triggers the build.
 #       And the hooks which trigger CodeBuild project builds are environment and project and also repo specific,
