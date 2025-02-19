@@ -27,8 +27,9 @@ else
 fi
 
 
-# remove the deploy flag to avoid confusing the next deployment
+# remove the deploy flags to avoid confusing the next deployment
 rm -f /tmp/is_deploy_flag
+rm -f /tmp/is_pr_env_deploy_flag
 
 # remove the trailing .git
 # e.g. https://github.com/alloy-ch/rcplus-ci-debug.git ==> https://github.com/alloy-ch/rcplus-ci-debug

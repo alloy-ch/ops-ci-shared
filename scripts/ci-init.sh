@@ -7,12 +7,10 @@ dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 # shellcheck source=.
 . "$dir"/ci-safeguard.sh
 
-if [[ -f /tmp/is_deploy_flag ]]; then
-  rm /tmp/is_deploy_flag
-fi
-if [[ -f /tmp/is_pr_env_deploy_flag ]]; then
-  rm /tmp/is_pr_env_deploy_flag
-fi
+rm -f /tmp/is_deploy_flag
+rm -f /tmp/is_pr_env_deploy_flag
+rm -f /tmp/pr_env_url
+rm -f /tmp/pr_number
 
 # NOTE: All the actions below are only executed conditionally on the hook which triggers the build.
 #       And the hooks which trigger CodeBuild project builds are environment and project and also repo specific,
@@ -50,16 +48,16 @@ if [[ ${ENABLE_PR_ENVIRONMENTS} == "true" ]] && [[ ${FORCE_DEPLOY_PR_ENVIRONMENT
    echo "1" > /tmp/is_deploy_flag
    echo "1" > /tmp/is_pr_env_deploy_flag
    echo $FORCE_DEPLOY_PR_ENVIRONMENT > /tmp/pr_number
-elif [[ $(cat /tmp/is_deploy_flag 2>/dev/null) != "1" ]] && [[ ${ENABLE_PR_ENVIRONMENTS} == "true" ]] && [[ ${CODEBUILD_WEBHOOK_TRIGGER} == "pr/"* ]]; then
+elif [[ ${ENV} != "prod" ]] && [[ $(cat /tmp/is_deploy_flag 2>/dev/null) != "1" ]] && [[ ${ENABLE_PR_ENVIRONMENTS} == "true" ]] && [[ ${CODEBUILD_WEBHOOK_TRIGGER} == "pr/"* ]]; then
   # At this point we know:
   #  * We are not already deploying
   #  * We are in a repo which has PR environments enabled, and
   #  * it was triggered by a GitHub Pull Request
-  # So, we should deploy the PR environment if the pull request has that label "pr-environment"
+  # So, we should deploy the PR environment unless the pull request has the label "no-pr-environment"
   export GH_TOKEN=$(aws --region "${AWS_REGION}" ssm get-parameter --output json --name /ops-ci/github-access-token --with-decryption | jq -crM '.Parameter.Value')
   pr_number=$(echo "${CODEBUILD_WEBHOOK_TRIGGER}" | cut -d'/' -f2)
-  if gh pr view "$pr_number" --json labels --jq '.labels[].name' | grep -q "pr-environment" ; then
-   DEPLOYING="Will deploy (because: PR environment)"
+  if ! gh pr view "$pr_number" --json labels --jq '.labels[].name' | grep -q "no-pr-environment" ; then
+   DEPLOYING="Will deploy (because: not prod, PR environment, and 'no-pr-environment' not present)"
    echo "1" > /tmp/is_deploy_flag
    echo "1" > /tmp/is_pr_env_deploy_flag
    echo $pr_number > /tmp/pr_number
