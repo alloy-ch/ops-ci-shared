@@ -7,6 +7,11 @@ if [[ -z ${ENV} ]]; then
   exit 1
 fi
 
+if [[ -z ${PROJECT_ID} ]]; then
+  echo "Error: missing required env PROJECT_ID"
+  exit 1
+fi
+
 if [[ -z ${AWS_REGION} ]]; then
   echo "Error: missing required env AWS_REGION"
   exit 2

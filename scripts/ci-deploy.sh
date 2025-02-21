@@ -76,9 +76,9 @@ for module in "${MODULES[@]}"; do
     fi
 
     if [[ "$IS_PR_ENV_BUILD" != "true" ]]; then
-      ansible-playbook -e env="$ENV" playbook.yml
+      ansible-playbook -e env="$ENV" -e project_id="$PROJECT_ID" playbook.yml
     else
-      ansible-playbook -e env="$ENV" -e is_pr_env_build="$IS_PR_ENV_BUILD" -e pr_number="$PR_NUMBER" playbook.yml
+      ansible-playbook -e env="$ENV" -e project_id="$PROJECT_ID" -e is_pr_env_build="$IS_PR_ENV_BUILD" -e pr_number="$PR_NUMBER" playbook.yml
     fi
     
   fi
