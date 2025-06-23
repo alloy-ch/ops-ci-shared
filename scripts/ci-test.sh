@@ -45,18 +45,32 @@ if [[ -f "package-lock.json" ]]; then
   (( SKIP_INSTALL == 0 )) && npm --no-color ci
   npm --no-color test
 elif [[ -f "pyproject.toml" ]]; then
-  echo "Detected Python project. Will run pytest tests..."
-  poetry config virtualenvs.create true
-  poetry config virtualenvs.in-project true
-  (( SKIP_INSTALL == 0 )) && poetry install --no-interaction --no-ansi
+  if [[ -f "uv.lock" ]]; then
+    echo "Detected Python project with uv. Will run pytest tests..."
+    (( SKIP_INSTALL == 0 )) && uv sync --no-progress
 
-  if [[ "$source_folder" == *"/dbt" ]]; then
-    .venv/bin/dbt deps --project-dir "$dbt_project_folder" --profiles-dir "$dbt_project_folder"
+    if [[ "$source_folder" == *"/dbt" ]]; then
+      uv run dbt deps --project-dir "$dbt_project_folder" --profiles-dir "$dbt_project_folder"
+    fi
+
+    ENV=$ENV uv run pytest
+  elif [[ -f "poetry.lock" ]]; then
+    echo "Detected Python project with Poetry. Will run pytest tests..."
+    poetry config virtualenvs.create true
+    poetry config virtualenvs.in-project true
+    (( SKIP_INSTALL == 0 )) && poetry install --no-interaction --no-ansi
+
+    if [[ "$source_folder" == *"/dbt" ]]; then
+      .venv/bin/dbt deps --project-dir "$dbt_project_folder" --profiles-dir "$dbt_project_folder"
+    fi
+
+    ENV=$ENV poetry run pytest
+    echo "Cleaning up test environment..."
+    rm -rf .venv
+  else
+    echo "ERROR: Could not determine Python project type. Neither uv.lock nor poetry.lock found."
+    exit 1
   fi
-
-  ENV=$ENV poetry run pytest
-  echo "Cleaning up test environment..."
-  rm -rf .venv
 else
   echo "ERROR: Could not determine test suite to run."
   exit 1
