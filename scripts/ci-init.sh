@@ -21,6 +21,10 @@ if [[ ${AGGRESSIVE_DEVELOPMENT} == "1" ]]; then
   if [[ ${CODEBUILD_WEBHOOK_HEAD_REF} == "refs/heads/develop" ]] || [[ ${CODEBUILD_WEBHOOK_HEAD_REF} == "refs/heads/main" ]]; then
     DEPLOYING="Will deploy (because: develop or main branch)"
     echo "1" > /tmp/is_deploy_flag
+  elif [[ ${CODEBUILD_WEBHOOK_HEAD_REF} == "refs/tags/v"* ]] && [[ ${ENV} == "prod" ]]; then
+    # github-flow repos trigger prod builds on version tags, not branch pushes
+    DEPLOYING="Will deploy (because: tag on prod)"
+    echo "1" > /tmp/is_deploy_flag
   elif [[ ${FORCE_DEPLOY} == "1" ]] || [[ ${FORCE_DEPLOY} == "true" ]]; then
     DEPLOYING="Will deploy (because: FORCE_DEPLOY)"
     echo "1" > /tmp/is_deploy_flag
