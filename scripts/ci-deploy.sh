@@ -14,6 +14,7 @@ if [[ $(cat /tmp/is_deploy_flag 2>/dev/null) != "1" ]]; then
   else
     echo "Skipping deploy as deployment flag is not set"
   fi
+  echo "(ci-init.sh sets /tmp/is_deploy_flag in CI. For a local deploy, run: echo 1 > /tmp/is_deploy_flag)"
   exit 0
 fi
 
@@ -55,6 +56,36 @@ for module in "${MODULES[@]}"; do
     exit 1
   fi
   popd
+done
+
+# preflight: fail in the first seconds rather than after the images are built and pushed
+if [[ -n ${ANSIBLE_RUN_TAGS} ]] || [[ -n ${ANSIBLE_SKIP_TAGS} ]]; then
+  echo "Partial deploy: ANSIBLE_RUN_TAGS=\"${ANSIBLE_RUN_TAGS}\" ANSIBLE_SKIP_TAGS=\"${ANSIBLE_SKIP_TAGS}\""
+fi
+
+for module in "${MODULES[@]}"; do
+  if grep -rqs --include='*.yml' "build_push_docker_image" "${module}"; then
+    if ! docker info >/dev/null 2>&1; then
+      echo "Preflight failed: ${module} builds Docker images, but the Docker daemon does not respond"
+      exit 1
+    fi
+    if ! docker buildx version >/dev/null 2>&1; then
+      echo "Preflight failed: ${module} builds Docker images, but docker buildx is not available"
+      exit 1
+    fi
+    break
+  fi
+done
+
+# repo-specific checks, e.g. that the database is reachable (VPN)
+for module in "${MODULES[@]}"; do
+  if [[ -x "${module}/preflight.sh" ]]; then
+    echo "Running ${module}/preflight.sh..."
+    if ! "${module}/preflight.sh"; then
+      echo "Preflight failed: ${module}/preflight.sh"
+      exit 1
+    fi
+  fi
 done
 
 for module in "${MODULES[@]}"; do
