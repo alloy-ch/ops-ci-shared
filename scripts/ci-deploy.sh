@@ -64,27 +64,39 @@ if [[ -n ${ANSIBLE_RUN_TAGS} ]] || [[ -n ${ANSIBLE_SKIP_TAGS} ]]; then
 fi
 
 for module in "${MODULES[@]}"; do
-  if grep -rqs --include='*.yml' "build_push_docker_image" "${module}"; then
+  if grep -rqs --include='*.yml' --include='*.yaml' --exclude-dir=node_modules --exclude-dir=.venv \
+      "build_push_docker_image" "${module}"; then
+    docker_problem=""
     if ! docker info >/dev/null 2>&1; then
-      echo "Preflight failed: ${module} builds Docker images, but the Docker daemon does not respond"
-      exit 1
+      docker_problem="the Docker daemon does not respond"
+    elif ! docker buildx version >/dev/null 2>&1; then
+      docker_problem="docker buildx is not available"
     fi
-    if ! docker buildx version >/dev/null 2>&1; then
-      echo "Preflight failed: ${module} builds Docker images, but docker buildx is not available"
-      exit 1
+    if [[ -n ${docker_problem} ]]; then
+      # with a tag selection, the selected tasks may not build any image
+      if [[ -n ${ANSIBLE_RUN_TAGS} ]] || [[ -n ${ANSIBLE_SKIP_TAGS} ]]; then
+        echo "WARNING: ${module} builds Docker images, but ${docker_problem}"
+      else
+        echo "Preflight failed: ${module} builds Docker images, but ${docker_problem}"
+        exit 1
+      fi
     fi
     break
   fi
 done
 
-# repo-specific checks, e.g. that the database is reachable (VPN)
+# repo-specific checks, e.g. that the database is reachable (VPN); run in the module folder, before any module deploys
 for module in "${MODULES[@]}"; do
-  if [[ -x "${module}/preflight.sh" ]]; then
+  if [[ -f "${module}/preflight.sh" ]] && [[ ! -x "${module}/preflight.sh" ]]; then
+    echo "WARNING: ${module}/preflight.sh is not executable, skipping it"
+  elif [[ -x "${module}/preflight.sh" ]]; then
     echo "Running ${module}/preflight.sh..."
-    if ! "${module}/preflight.sh"; then
+    pushd "${module}"
+    if ! ./preflight.sh; then
       echo "Preflight failed: ${module}/preflight.sh"
       exit 1
     fi
+    popd
   fi
 done
 
