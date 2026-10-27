@@ -100,6 +100,51 @@ for module in "${MODULES[@]}"; do
   fi
 done
 
+# deployment record: which ref of this repo the environment runs, who deployed it and when
+if [[ -n ${CODEBUILD_BUILD_ID} ]]; then
+  DEPLOY_REPO=$(basename -s .git "${CODEBUILD_SOURCE_REPO_URL}")
+  DEPLOY_REF=${CODEBUILD_WEBHOOK_HEAD_REF:-${CODEBUILD_SOURCE_VERSION}}
+  DEPLOY_COMMIT=${CODEBUILD_RESOLVED_SOURCE_VERSION}
+  DEPLOY_WHERE="codebuild:${CODEBUILD_BUILD_ID}"
+else
+  DEPLOY_REPO=$(basename -s .git "$(git config --get remote.origin.url 2>/dev/null)")
+  DEPLOY_REF=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+  DEPLOY_COMMIT=$(git rev-parse HEAD 2>/dev/null || true)
+  if [[ -n $(git status --porcelain 2>/dev/null) ]]; then
+    DEPLOY_COMMIT="${DEPLOY_COMMIT}+uncommitted"
+  fi
+  DEPLOY_WHERE="laptop"
+fi
+DEPLOY_PARAM="/ops-ci/deployments/${DEPLOY_REPO:-${REPO_NAME}}"
+if [[ "$IS_PR_ENV_BUILD" == "true" ]]; then
+  DEPLOY_PARAM="${DEPLOY_PARAM}-pr${PR_NUMBER}"
+fi
+DEPLOY_WHO=$(aws --region "${AWS_REGION}" sts get-caller-identity --query Arn --output text 2>/dev/null | awk -F/ '{print $NF}')
+
+function record_deployment() {
+  local record
+  record=$(jq -cn --arg ref "${DEPLOY_REF}" --arg commit "${DEPLOY_COMMIT}" --arg who "${DEPLOY_WHO}" \
+    --arg where "${DEPLOY_WHERE}" --arg status "$1" --arg when "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg run_tags "${ANSIBLE_RUN_TAGS}" --arg skip_tags "${ANSIBLE_SKIP_TAGS}" \
+    '{ref: $ref, commit: $commit, who: $who, where: $where, status: $status, when: $when,
+      run_tags: $run_tags, skip_tags: $skip_tags}')
+  aws --region "${AWS_REGION}" ssm put-parameter --name "${DEPLOY_PARAM}" --type String --overwrite \
+    --value "${record}" >/dev/null 2>&1 || echo "WARNING: could not record the deployment in ${DEPLOY_PARAM}"
+}
+
+previous=$(aws --region "${AWS_REGION}" ssm get-parameter --name "${DEPLOY_PARAM}" --query Parameter.Value --output text 2>/dev/null || true)
+if [[ -n ${previous} ]]; then
+  echo "Previous deployment (${DEPLOY_PARAM}): ${previous}"
+  if [[ $(echo "${previous}" | jq -r '.ref') != "${DEPLOY_REF}" ]]; then
+    echo "WARNING: ${ENV} runs $(echo "${previous}" | jq -r '.ref') of ${DEPLOY_REPO}; this deploy replaces it with ${DEPLOY_REF}"
+  fi
+  if [[ $(echo "${previous}" | jq -r '.status') == "in_progress" ]]; then
+    echo "WARNING: the previous deployment has not finished, or was interrupted"
+  fi
+fi
+record_deployment "in_progress"
+trap 'if [[ $? == 0 ]]; then record_deployment "succeeded"; else record_deployment "failed"; fi' EXIT
+
 for module in "${MODULES[@]}"; do
   echo Deploying "${module}" module...
   pushd "${module}"
