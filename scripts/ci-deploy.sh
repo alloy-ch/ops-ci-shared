@@ -71,6 +71,7 @@ else
   # empty on a detached HEAD, which then records the commit as the ref
   DEPLOY_REF=$(git symbolic-ref --short -q HEAD 2>/dev/null || true)
   DEPLOY_COMMIT=$(git rev-parse HEAD 2>/dev/null || true)
+  DEPLOY_REF=${DEPLOY_REF:-${DEPLOY_COMMIT}}
   if [[ -n $(git status --porcelain 2>/dev/null) ]]; then
     DEPLOY_COMMIT="${DEPLOY_COMMIT}+uncommitted"
   fi
@@ -135,33 +136,39 @@ def main(record, log_path, junit_dir, output_path):
     summary = json.loads(record)
     stats, warnings, recaps = {}, [], 0
     tasks = dict.fromkeys(COUNTERS, 0)
-    in_recap = False
-    with open(log_path, errors='replace') as log:  # empty for a CDK-only deploy
-        for line in log:
-            line = ANSI.sub('', line)
-            if line.startswith('\tRUN: '):
-                try:
-                    data = json.loads(line[len('\tRUN: '):])
-                except ValueError as error:
-                    warnings.append(f'unreadable custom stats line: {error}')
+    # only lines in the CUSTOM STATS and PLAY RECAP sections count, so task output shaped like them is ignored
+    section = None
+    try:
+        with open(log_path, errors='replace') as log:  # empty for a CDK-only deploy
+            for line in log:
+                line = ANSI.sub('', line)
+                stripped = line.strip()
+                if line.startswith('CUSTOM STATS'):
+                    section = 'stats'
+                elif line.startswith('PLAY RECAP'):
+                    section = 'recap'
+                elif section == 'stats' and (not stripped or line.startswith('\t')):
+                    # tab-indented `<host>: {...}` and `RUN: {...}` lines, separated by blank lines
+                    if line.startswith('\tRUN: '):
+                        try:
+                            data = json.loads(line[len('\tRUN: '):])
+                        except ValueError as error:
+                            warnings.append(f'unreadable custom stats line: {error}')
+                        else:
+                            if isinstance(data, dict):
+                                merge(stats, data)
+                            else:
+                                warnings.append(f'custom stats line is a JSON {type(data).__name__}, not an object')
+                elif section == 'recap' and (match := RECAP_LINE.match(stripped)):
+                    recaps += 1
+                    for counter in match.group(1).split():
+                        name, value = counter.split('=')
+                        if name in tasks:
+                            tasks[name] += int(value)
                 else:
-                    if isinstance(data, dict):
-                        merge(stats, data)
-                    else:
-                        warnings.append('custom stats line is not a JSON object')
-            # host lines only count below a PLAY RECAP banner, so task output shaped like one is ignored
-            if line.startswith('PLAY RECAP'):
-                in_recap = True
-                continue
-            if not line.strip():
-                in_recap = False
-            match = in_recap and RECAP_LINE.match(line.strip())
-            if match:
-                recaps += 1
-                for counter in match.group(1).split():
-                    name, value = counter.split('=')
-                    if name in tasks:
-                        tasks[name] += int(value)
+                    section = None
+    except OSError as error:
+        warnings.append(f'unreadable Ansible log: {error}')
 
     failed_tasks = []
     junit_files = sorted(glob.glob(f'{junit_dir}/*.xml'))
@@ -268,7 +275,9 @@ function on_exit() {
   if [[ $1 == 0 ]]; then
     status="succeeded"
   fi
-  record=$(build_record "${status}")
+  if ! record=$(build_record "${status}"); then
+    echo "WARNING: could not build the deployment record (jq)"
+  fi
   if [[ "$IS_PR_ENV_BUILD" != "true" ]]; then
     record_deployment "${record}"
   fi
