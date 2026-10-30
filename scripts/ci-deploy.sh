@@ -100,6 +100,66 @@ for module in "${MODULES[@]}"; do
   fi
 done
 
+# deployment record: which ref of this repo the environment runs, who deployed it and when
+# (not for PR environments, which belong to their pull request)
+if [[ "$IS_PR_ENV_BUILD" != "true" ]]; then
+  if [[ -n ${CODEBUILD_BUILD_ID} ]]; then
+    DEPLOY_REPO=$(basename -s .git "${CODEBUILD_SOURCE_REPO_URL}")
+    # as in ci-notify-slack.sh: refs/heads/develop ==> develop, otherwise the source version of the build
+    DEPLOY_REF=${CODEBUILD_WEBHOOK_HEAD_REF//refs\/heads\//}
+    DEPLOY_REF=${DEPLOY_REF:-${CODEBUILD_SOURCE_VERSION}}
+    DEPLOY_COMMIT=${CODEBUILD_RESOLVED_SOURCE_VERSION}
+    DEPLOY_WHERE="codebuild:${CODEBUILD_BUILD_ID}"
+  else
+    DEPLOY_REPO=$(basename -s .git "$(git config --get remote.origin.url 2>/dev/null)")
+    DEPLOY_REF=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+    DEPLOY_COMMIT=$(git rev-parse HEAD 2>/dev/null || true)
+    if [[ -n $(git status --porcelain 2>/dev/null) ]]; then
+      DEPLOY_COMMIT="${DEPLOY_COMMIT}+uncommitted"
+    fi
+    DEPLOY_WHERE="laptop"
+  fi
+  DEPLOY_REF=${DEPLOY_REF:-${DEPLOY_COMMIT}}
+  DEPLOY_PARAM="/ops-ci/deployments/${DEPLOY_REPO:-${REPO_NAME}}"
+  DEPLOY_WHO=$(aws --region "${AWS_REGION}" sts get-caller-identity --query Arn --output text 2>/dev/null | awk -F/ '{print $NF}')
+
+  previous=$(aws --region "${AWS_REGION}" ssm get-parameter --name "${DEPLOY_PARAM}" --query Parameter.Value --output text 2>/dev/null || true)
+  if ! jq -e 'type == "object"' >/dev/null 2>&1 <<<"${previous}"; then
+    previous=""
+  fi
+  # what the environment runs: the previous deployment if it succeeded, otherwise the last one that did
+  last_succeeded=$(jq -c '(if .status == "succeeded" then del(.last_succeeded) else .last_succeeded end) // empty' <<<"${previous:-null}")
+
+  if [[ -n ${previous} ]]; then
+    echo "Previous deployment (${DEPLOY_PARAM}): ${previous}"
+    running_ref=$(jq -r '.ref // empty' <<<"${last_succeeded:-null}")
+    if [[ -n ${running_ref} ]] && [[ ${running_ref} != "${DEPLOY_REF}" ]]; then
+      echo "WARNING: ${ENV} runs ${running_ref} of ${DEPLOY_REPO}; this deploy replaces it with ${DEPLOY_REF}"
+    fi
+    if [[ $(jq -r '.status' <<<"${previous}") == "in_progress" ]]; then
+      echo "WARNING: the previous deployment has not finished, or was interrupted"
+    fi
+  fi
+
+  function record_deployment() {
+    local record error
+    record=$(jq -cn --arg ref "${DEPLOY_REF}" --arg commit "${DEPLOY_COMMIT}" --arg who "${DEPLOY_WHO}" \
+      --arg where "${DEPLOY_WHERE}" --arg status "$1" --arg when "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --arg run_tags "${ANSIBLE_RUN_TAGS}" --arg skip_tags "${ANSIBLE_SKIP_TAGS}" \
+      --argjson last_succeeded "${last_succeeded:-null}" \
+      '{ref: $ref, commit: $commit, who: $who, where: $where, status: $status, when: $when,
+        run_tags: $run_tags, skip_tags: $skip_tags}
+       + (if $status == "succeeded" or $last_succeeded == null then {} else {last_succeeded: $last_succeeded} end)')
+    if ! error=$(aws --region "${AWS_REGION}" ssm put-parameter --name "${DEPLOY_PARAM}" --type String --overwrite \
+        --value "${record}" 2>&1 >/dev/null); then
+      echo "WARNING: could not record the deployment in ${DEPLOY_PARAM}:$(tr -s '\n' ' ' <<<"${error}")"
+    fi
+  }
+
+  record_deployment "in_progress"
+  trap 'if [[ $? == 0 ]]; then record_deployment "succeeded"; else record_deployment "failed"; fi' EXIT
+fi
+
 for module in "${MODULES[@]}"; do
   echo Deploying "${module}" module...
   pushd "${module}"
