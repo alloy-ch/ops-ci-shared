@@ -309,7 +309,8 @@ for module in "${MODULES[@]}"; do
     # for the deploy summary: print the set_stats data, write per-task results (junit), keep a copy of the log;
     # the callbacks of the module's ansible.cfg (e.g. profile_tasks) stay enabled
     summary_env=(ANSIBLE_SHOW_CUSTOM_STATS=true)
-    if callbacks=$(ansible-config dump --format json 2>/dev/null \
+    # verbosity 0: from 1 up, ansible-config prints "Using <file> as config file" before the JSON
+    if callbacks=$(ANSIBLE_VERBOSITY=0 ansible-config dump --format json 2>/dev/null \
         | jq -er '.[] | select(.name == "CALLBACKS_ENABLED") | .value | join(",")'); then
       summary_env+=(ANSIBLE_CALLBACKS_ENABLED="${callbacks:+${callbacks},}ansible.builtin.junit"
         JUNIT_OUTPUT_DIR="${DEPLOY_OUTPUT_DIR}/junit")
