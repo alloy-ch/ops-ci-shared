@@ -58,7 +58,11 @@ elif [[ ${ENV} != "prod" ]] && [[ $(cat /tmp/is_deploy_flag 2>/dev/null) != "1" 
   #  * We are in a repo which has PR environments enabled, and
   #  * it was triggered by a GitHub Pull Request
   # So, we should deploy the PR environment unless the pull request has the label "no-pr-environment"
-  export GH_TOKEN=$(aws --region "${AWS_REGION}" ssm get-parameter --output json --name /ops-ci/github-access-token --with-decryption | jq -crM '.Parameter.Value')
+  # token of the PR bot app, read-only on this repo's PRs; without it the label check fails open, as before
+  if ! GH_TOKEN=$("$dir"/ci-github-app-token.sh /ops-ci/github-pr-bot '{"pull_requests":"read"}'); then
+    echo "WARNING: no token of the GitHub PR bot app, the label 'no-pr-environment' is not checked"
+  fi
+  export GH_TOKEN
   pr_number=$(echo "${CODEBUILD_WEBHOOK_TRIGGER}" | cut -d'/' -f2)
   if ! gh pr view "$pr_number" --json labels --jq '.labels[].name' | grep -q "no-pr-environment" ; then
    DEPLOYING="Will deploy (because: not prod, PR environment, and 'no-pr-environment' not present)"
